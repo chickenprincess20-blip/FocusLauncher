@@ -321,4 +321,3 @@ public void onBackPressed() {
 int displayWidth = getResources().getDisplayMetrics().widthPixels;
 screenPager.smoothScrollTo(displayWidth, 0);
 }
-}
