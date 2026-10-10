@@ -1,0 +1,324 @@
+package com.example.focuslauncher;
+import android.app.Activity;
+import android.app.AlertDialog;
+import android.content.Intent;
+import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
+import android.graphics.Color;
+import android.graphics.drawable.GradientDrawable;
+import android.os.Bundle;
+import android.text.Editable;
+import android.text.TextWatcher;
+import android.view.Gravity;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.Button;
+import android.widget.EditText;
+import android.widget.GridLayout;
+import android.widget.HorizontalScrollView;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.ScrollView;
+import android.widget.TextView;
+import android.widget.Toast;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+public class MainActivity extends Activity {
+private HorizontalScrollView screenPager;
+private LinearLayout pagesContainer;
+private LinearLayout controlCenterView;
+private LinearLayout homeView;
+private LinearLayout appDrawerView;
+private LinearLayout focusButtonContainer;
+private GridLayout appsGrid;
+private LinearLayout drawerAppListContainer;
+private EditText searchField;
+private SharedPreferences prefs;
+private PackageManager packageManager;
+private String currentFocusMode;
+private Set<String> focusModesList;
+private List<ResolveInfo> masterAppList = new ArrayList<>(); @Override
+protected void onCreate(Bundle savedInstanceState) {
+super.onCreate(savedInstanceState);
+prefs = getSharedPreferences("FocusLauncherSettings", MODE_PRIVATE);
+packageManager = getPackageManager();
+screenPager = new HorizontalScrollView(this);
+screenPager.setHorizontalScrollBarEnabled(false);
+screenPager.setSmoothScrollingEnabled(true);
+pagesContainer = new LinearLayout(this);
+pagesContainer.setOrientation(LinearLayout.HORIZONTAL);
+screenPager.addView(pagesContainer);
+int displayWidth = getResources().getDisplayMetrics().widthPixels;
+LinearLayout.LayoutParams pageStructure = new LinearLayout.LayoutParams(
+displayWidth, ViewGroup.LayoutParams.MATCH_PARENT);
+controlCenterView = new LinearLayout(this);
+controlCenterView.setOrientation(LinearLayout.VERTICAL);
+controlCenterView.setPadding(48, 64, 48, 48);
+controlCenterView.setLayoutParams(pageStructure);
+buildControlCenter();
+ScrollView homeScroll = new ScrollView(this);
+homeScroll.setLayoutParams(pageStructure);
+homeView = new LinearLayout(this);
+homeView.setOrientation(LinearLayout.VERTICAL);
+homeView.setPadding(32, 48, 32, 48);
+homeScroll.addView(homeView);
+buildHomeScreen();
+appDrawerView = new LinearLayout(this);
+appDrawerView.setOrientation(LinearLayout.VERTICAL);
+appDrawerView.setPadding(32, 64, 32, 32);
+appDrawerView.setLayoutParams(pageStructure);
+buildAppDrawer();
+pagesContainer.addView(controlCenterView);
+pagesContainer.addView(homeScroll);
+pagesContainer.addView(appDrawerView);
+focusModesList = prefs.getStringSet("focus_modes", null);
+if (focusModesList == null) {
+focusModesList = new HashSet<>();
+focusModesList.add("WORK");
+focusModesList.add("PERSONAL");
+focusModesList.add("SLEEP");
+prefs.edit().putStringSet("focus_modes", focusModesList).apply();
+}
+currentFocusMode = prefs.getString("active_focus_mode", "PERSONAL");
+cacheSystemApplications();
+refreshFocusButtons();
+applyFocusProfile(currentFocusMode); setContentView(screenPager);
+screenPager.post(() -> screenPager.scrollTo(displayWidth, 0));
+}
+private void cacheSystemApplications() {
+Intent intent = new Intent(Intent.ACTION_MAIN, null);
+intent.addCategory(Intent.CATEGORY_LAUNCHER);
+masterAppList = packageManager.queryIntentActivities(intent, 0);
+}
+private void buildControlCenter() {
+controlCenterView.setBackgroundColor(Color.parseColor("#1C1C1E"));
+TextView header = new TextView(this);
+header.setText("Control Center");
+header.setTextSize(26);
+header.setTextColor(Color.WHITE);
+header.setPadding(0, 0, 0, 48);
+controlCenterView.addView(header);
+Button wifiBtn = new Button(this);
+wifiBtn.setText("■ Wi-Fi Status");
+wifiBtn.setOnClickListener(v -> startActivity(new
+Intent(android.provider.Settings.ACTION_WIFI_SETTINGS)));
+controlCenterView.addView(wifiBtn);
+Button bluetoothBtn = new Button(this);
+bluetoothBtn.setText("■ Bluetooth Settings");
+bluetoothBtn.setOnClickListener(v -> startActivity(new
+Intent(android.provider.Settings.ACTION_BLUETOOTH_SETTINGS)));
+controlCenterView.addView(bluetoothBtn);
+TextView notice = new TextView(this);
+notice.setText("■ Swipe left to return to Home");
+notice.setTextColor(Color.GRAY);
+notice.setPadding(0, 48, 0, 0);
+notice.setGravity(Gravity.CENTER);
+controlCenterView.addView(notice);
+}
+private void buildHomeScreen() {
+ImageView backgroundVisualAnchor = new ImageView(this);
+backgroundVisualAnchor.setLayoutParams(new LinearLayout.LayoutParams(
+ViewGroup.LayoutParams.MATCH_PARENT, 240));
+backgroundVisualAnchor.setScaleType(ImageView.ScaleType.CENTER_CROP);
+backgroundVisualAnchor.setImageResource(android.R.drawable.ic_menu_gallery);
+homeView.addView(backgroundVisualAnchor);
+focusButtonContainer = new LinearLayout(this);
+focusButtonContainer.setOrientation(LinearLayout.HORIZONTAL);
+focusButtonContainer.setPadding(0, 24, 0, 24);
+homeView.addView(focusButtonContainer);
+Button btnCreateFocus = new Button(this); btnCreateFocus.setText("■ New Focus");
+btnCreateFocus.setOnClickListener(v -> showCreateFocusDialog());
+homeView.addView(btnCreateFocus);
+appsGrid = new GridLayout(this);
+appsGrid.setColumnCount(4);
+appsGrid.setAlignmentMode(GridLayout.ALIGN_BOUNDS);
+homeView.addView(appsGrid);
+}
+private void buildAppDrawer() {
+appDrawerView.setBackgroundColor(Color.parseColor("#121212"));
+searchField = new EditText(this);
+searchField.setHint("Search Applications...");
+searchField.setHintTextColor(Color.GRAY);
+searchField.setTextColor(Color.WHITE);
+searchField.setPadding(16, 24, 16, 24);
+GradientDrawable searchBoxShape = new GradientDrawable();
+searchBoxShape.setCornerRadius(16);
+searchBoxShape.setColor(Color.parseColor("#2C2C2E"));
+searchField.setBackground(searchBoxShape);
+appDrawerView.addView(searchField);
+ScrollView scrollDrawer = new ScrollView(this);
+scrollDrawer.setPadding(0, 24, 0, 0);
+drawerAppListContainer = new LinearLayout(this);
+drawerAppListContainer.setOrientation(LinearLayout.VERTICAL);
+scrollDrawer.addView(drawerAppListContainer);
+appDrawerView.addView(scrollDrawer);
+searchField.addTextChangedListener(new TextWatcher() {
+@Override
+public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+@Override
+public void onTextChanged(CharSequence s, int start, int before, int count) {
+renderAppDrawerItems(s.toString());
+}
+@Override
+public void afterTextChanged(Editable s) {}
+});
+}
+private void renderAppDrawerItems(String filterText) {
+drawerAppListContainer.removeAllViews();
+String searchTarget = filterText.toLowerCase().trim();
+for (ResolveInfo ri : masterAppList) {
+String appLabel = ri.loadLabel(packageManager).toString();
+String pkgName = ri.activityInfo.packageName;
+if (!searchTarget.isEmpty() && !appLabel.toLowerCase().contains(searchTarget)) {
+continue;
+} LinearLayout itemRow = new LinearLayout(this);
+itemRow.setOrientation(LinearLayout.HORIZONTAL);
+itemRow.setGravity(Gravity.CENTER_VERTICAL);
+itemRow.setPadding(16, 24, 16, 24);
+ImageView iconView = new ImageView(this);
+iconView.setLayoutParams(new LinearLayout.LayoutParams(96, 96));
+iconView.setImageDrawable(ri.loadIcon(packageManager));
+TextView labelView = new TextView(this);
+labelView.setText(appLabel);
+labelView.setTextColor(Color.WHITE);
+labelView.setTextSize(16);
+labelView.setPadding(32, 0, 0, 0);
+itemRow.addView(iconView);
+itemRow.addView(labelView);
+itemRow.setOnClickListener(v -> {
+Intent launchIntent = packageManager.getLaunchIntentForPackage(pkgName);
+if (launchIntent != null) startActivity(launchIntent);
+});
+drawerAppListContainer.addView(itemRow);
+}
+}
+private void applyFocusProfile(String mode) {
+String defaultColor = "#FFFFFF";
+if ("WORK".equals(mode)) defaultColor = "#E0F7FA";
+else if ("SLEEP".equals(mode)) defaultColor = "#121212";
+else if ("PERSONAL".equals(mode)) defaultColor = "#F5F5F5";
+String savedColor = prefs.getString("focus_color_" + mode, defaultColor);
+try {
+homeView.setBackgroundColor(Color.parseColor(savedColor));
+} catch (Exception e) {
+homeView.setBackgroundColor(Color.WHITE);
+}
+renderHomeScreenApps(mode);
+renderAppDrawerItems("");
+}
+private void renderHomeScreenApps(String focusFilter) {
+appsGrid.removeAllViews();
+for (ResolveInfo ri : masterAppList) {
+String pkgName = ri.activityInfo.packageName;
+String appLabel = ri.loadLabel(packageManager).toString();
+if ("WORK".equals(focusFilter) && (pkgName.contains("instagram") ||
+pkgName.contains("tiktok") || pkgName.contains("facebook"))) {
+continue;
+} LinearLayout appItem = new LinearLayout(this);
+appItem.setOrientation(LinearLayout.VERTICAL);
+appItem.setGravity(Gravity.CENTER);
+appItem.setPadding(16, 16, 16, 16);
+ImageView appIcon = new ImageView(this);
+appIcon.setLayoutParams(new LinearLayout.LayoutParams(120, 120));
+String customIconColor = prefs.getString("icon_color_" + pkgName, "");
+if (!customIconColor.isEmpty()) {
+GradientDrawable shape = new GradientDrawable();
+shape.setCornerRadius(24);
+shape.setColor(Color.parseColor(customIconColor));
+appIcon.setBackground(shape);
+} else {
+appIcon.setImageDrawable(ri.loadIcon(packageManager));
+}
+appItem.setOnLongClickListener(v -> {
+openIconCustomizerDialog(pkgName, appLabel);
+return true;
+});
+TextView appTitle = new TextView(this);
+appTitle.setText(appLabel);
+appTitle.setTextSize(11);
+appTitle.setGravity(Gravity.CENTER);
+appTitle.setMaxLines(1);
+if ("SLEEP".equals(focusFilter)) appTitle.setTextColor(Color.WHITE);
+else appTitle.setTextColor(Color.BLACK);
+appItem.addView(appIcon);
+appItem.addView(appTitle);
+appItem.setOnClickListener(v -> {
+Intent launchIntent = packageManager.getLaunchIntentForPackage(pkgName);
+if (launchIntent != null) startActivity(launchIntent);
+});
+appsGrid.addView(appItem);
+}
+}
+private void showCreateFocusDialog() {
+AlertDialog.Builder builder = new AlertDialog.Builder(this);
+builder.setTitle("Create Custom Focus Profile");
+LinearLayout layout = new LinearLayout(this);
+layout.setOrientation(LinearLayout.VERTICAL);
+layout.setPadding(24, 16, 24, 16);
+final EditText inputName = new EditText(this);
+inputName.setHint("Focus Name (e.g., Gaming)");
+layout.addView(inputName);
+final EditText inputColor = new EditText(this); inputColor.setHint("Background Hex Code (e.g., #FF5722)");
+layout.addView(inputColor);
+builder.setView(layout);
+builder.setPositiveButton("Save Profile", (dialog, which) -> {
+String name = inputName.getText().toString().trim().toUpperCase();
+String color = inputColor.getText().toString().trim();
+if (!name.isEmpty()) {
+focusModesList.add(name);
+prefs.edit().putStringSet("focus_modes", focusModesList).apply();
+if (!color.startsWith("#")) color = "#607D8B";
+prefs.edit().putString("focus_color_" + name, color).apply();
+refreshFocusButtons();
+switchFocusMode(name);
+}
+});
+builder.setNegativeButton("Cancel", (dialog, which) -> dialog.cancel());
+builder.show();
+}
+private void refreshFocusButtons() {
+focusButtonContainer.removeAllViews();
+for (String mode : focusModesList) {
+Button btn = new Button(this);
+btn.setText(mode);
+LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.0f);
+params.setMargins(4, 0, 4, 0);
+btn.setLayoutParams(params);
+btn.setOnClickListener(v -> switchFocusMode(mode));
+focusButtonContainer.addView(btn);
+}
+}
+private void switchFocusMode(String targetMode) {
+currentFocusMode = targetMode;
+prefs.edit().putString("active_focus_mode", targetMode).apply();
+applyFocusProfile(targetMode);
+Toast.makeText(this, "Focus Profile: " + targetMode, Toast.LENGTH_SHORT).show();
+}
+private void openIconCustomizerDialog(String packageName, String appName) {
+AlertDialog.Builder builder = new AlertDialog.Builder(this);
+builder.setTitle("Modify Icon: " + appName);
+final EditText colorInput = new EditText(this);
+colorInput.setHint("Icon Accent Hex (#FF0000)");
+builder.setView(colorInput);
+builder.setPositiveButton("Apply Theme", (dialog, which) -> {
+String hex = colorInput.getText().toString().trim();
+if (hex.startsWith("#")) {
+prefs.edit().putString("icon_color_" + packageName, hex).apply(); applyFocusProfile(currentFocusMode);
+}
+});
+builder.setNegativeButton("Reset Default", (dialog, which) -> {
+prefs.edit().remove("icon_color_" + packageName).apply();
+applyFocusProfile(currentFocusMode);
+});
+builder.show();
+}
+@Override
+public void onBackPressed() {
+int displayWidth = getResources().getDisplayMetrics().widthPixels;
+screenPager.smoothScrollTo(displayWidth, 0);
+}
+}
