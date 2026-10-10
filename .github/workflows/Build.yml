@@ -15,8 +15,9 @@ jobs:
           distribution: 'zulu'
           java-version: '17'
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Configure Android SDK Environment Path
+        run: |
+          echo "sdk.dir=$ANDROID_HOME" > local.properties
 
       - name: Compile and Assemble Debug APK
         run: gradle assembleDebug
